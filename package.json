@@ -1,0 +1,38 @@
+{
+	"name": "spotify-clone",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+		"start": "npm start --prefix backend"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@clerk/clerk-react": "^5.31.4",
+		"@clerk/express": "^1.4.18",
+		"@clerk/nextjs": "^6.19.3",
+		"@radix-ui/react-slot": "^1.2.2",
+		"class-variance-authority": "^0.7.1",
+		"clerk": "^0.8.3",
+		"cloudinary": "^2.6.1",
+		"cors": "^2.8.5",
+		"dotenv": "^16.5.0",
+		"express": "^5.1.0",
+		"express-fileupload": "^1.5.1",
+		"mongoose": "^8.14.3",
+		"node-cron": "^4.0.5",
+		"react": "^19.1.0",
+		"react-router-dom": "^7.6.0",
+		"socket.io": "^4.8.1",
+		"tailwind-merge": "^3.3.0"
+	},
+	"devDependencies": {
+		"@types/prop-types": "^15.7.14",
+		"autoprefixer": "^10.4.21",
+		"postcss": "^8.5.3",
+		"tailwindcss": "^4.1.7"
+	}
+}

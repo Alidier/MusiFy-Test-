@@ -6,6 +6,13 @@ const userSchema = new mongoose.Schema(
 			type: String,
 			required: true,
 		},
+		favouriteSongs: [
+			{
+				type: mongoose.Schema.Types.ObjectId,
+				ref: 'Song', 
+			    required: true,
+			},
+		],
 		imageUrl: {
 			type: String,
 			required: true,

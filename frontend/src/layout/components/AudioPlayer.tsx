@@ -1,148 +1,176 @@
-import { usePlayerStore } from "@/stores/usePlayerStore";
+// frontend/src/layout/components/AudioPlayer.tsx
+import { usePlayerStore } from "@/stores/usePlayerStore"; //
 import { useEffect, useRef } from "react";
+import { Song } from "@/types"; // Убедитесь, что Song импортирован
 
 const AudioPlayer = () => {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const prevSongUrlRef = useRef<string | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const {
+        currentSong,
+        isPlaying,
+        volume,
+        isMuted,
+        isRepeat,
+        currentTime, // Получаем currentTime для установки в <audio>
+        setAudioCurrentTime,
+        setDuration,
+        playNext,
+        // Убедитесь, что все необходимые функции из стора здесь перечислены,
+        // если они используются для управления <audio> элементом напрямую
+    } = usePlayerStore();
 
-  const { currentSong, isPlaying, volume, isMuted, currentTime } = usePlayerStore(); // Добавили currentTime
+    // Эффект для управления источником аудио, воспроизведением/паузой
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
 
-  // --- EFFECT 1: Обработка изменения песни и состояния воспроизведения (play/pause) ---
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentSong) {
-      if (audio) audio.pause();
-      usePlayerStore.setState({ isPlaying: false, currentTime: 0, duration: 0 });
-      prevSongUrlRef.current = null;
-      return;
-    }
+        if (currentSong) {
+            if (audio.src !== currentSong.audioUrl) {
+                console.log(`AudioPlayer: Song changed to ${currentSong.title}, URL: ${currentSong.audioUrl}`);
+                audio.src = currentSong.audioUrl;
+                // Сбрасываем currentTime и duration в сторе при смене трека,
+                // они будут обновлены из событий 'loadedmetadata' и 'timeupdate'
+                setAudioCurrentTime(0); // Сброс currentTime в сторе
+                setDuration(0);       // Сброс duration в сторе
+                audio.load(); // Важно для применения нового src
+            }
 
-    const isSongChange = prevSongUrlRef.current !== currentSong.audioUrl;
-
-    if (isSongChange) {
-      console.log('AudioPlayer: Song changed to', currentSong.title);
-      audio.src = currentSong.audioUrl;
-      audio.currentTime = 0; // Сброс времени при новой песне
-      usePlayerStore.setState({ currentTime: 0, duration: 0 }); // Сброс в сторе
-      prevSongUrlRef.current = currentSong.audioUrl;
-    }
-
-    if (isPlaying) {
-      console.log('AudioPlayer: Attempting to play...');
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.error("AudioPlayer: Error playing audio:", error);
-          if (error.name === 'NotAllowedError') {
-            console.warn('AudioPlayer: Autoplay was prevented. User interaction required.');
-            usePlayerStore.setState({ isPlaying: false });
-          }
-        });
-      }
-    } else {
-      console.log('AudioPlayer: Pausing...');
-      audio.pause();
-    }
-
-  }, [currentSong, isPlaying]);
-
-  // --- EFFECT 2: Обработка событий аудиоэлемента (timeupdate, loadedmetadata, ended, error) ---
-  // Этот эффект должен срабатывать только один раз, при монтировании компонента AudioPlayer.
-  // Обработчики внутри него будут всегда актуальными благодаря getState().
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleEnded = () => {
-      const currentStoreState = usePlayerStore.getState();
-      const actualIsRepeat = currentStoreState.isRepeat;
-      const actualCurrentSong = currentStoreState.currentSong;
-
-      console.log('AudioPlayer: --- EVENT: Audio Ended! ---');
-      console.log(`AudioPlayer: isRepeat (from store directly): ${actualIsRepeat}`);
-      console.log(`AudioPlayer: Current Song (from store directly): ${actualCurrentSong ? actualCurrentSong.title : 'NULL'}`);
-      console.log(`AudioPlayer: Is Playing (from store directly): ${currentStoreState.isPlaying}`);
-      console.log('AudioPlayer: ---------------------------');
-
-      if (actualIsRepeat && actualCurrentSong) {
-        console.log('AudioPlayer: ACTION: Repeating track -', actualCurrentSong.title);
-        audio.currentTime = 0;
-        usePlayerStore.setState({ currentTime: 0 }); // Обновляем UI время через стор
-        if (!currentStoreState.isPlaying) {
-          console.log('AudioPlayer: Repeat: Setting isPlaying to true in store.');
-          usePlayerStore.setState({ isPlaying: true });
+            if (isPlaying) {
+                audio.play().catch(error => console.error("Error playing audio:", error));
+            } else {
+                audio.pause();
+            }
         } else {
-          console.log('AudioPlayer: Repeat: Audio already playing, attempting to re-play audio element.');
-          const playPromise = audio.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(error => console.error("AudioPlayer: Error re-playing for repeat:", error));
-          }
+            // Если нет currentSong, останавливаем и сбрасываем
+            audio.pause();
+            audio.src = ""; // Очищаем src
+            setAudioCurrentTime(0);
+            setDuration(0);
         }
-      } else {
-        console.log('AudioPlayer: ACTION: Attempting to play next track. (Repeat is OFF or current song is NULL)');
-        currentStoreState.playNext();
-      }
-    };
+    }, [currentSong, isPlaying, setAudioCurrentTime, setDuration]); // Зависимости
 
-    const handleTimeUpdate = () => {
-      // Это условие предотвращает зацикливание, когда мы вручную устанавливаем currentTime
-      // Мы обновляем стор ТОЛЬКО если изменение пришло от браузера, а не от нашего seek
-      if (Math.abs(audio.currentTime - usePlayerStore.getState().currentTime) > 0.5) { // Небольшой допуск
-         usePlayerStore.getState().setAudioCurrentTime(audio.currentTime);
-      }
-    };
+    // Эффект для управления громкостью и Mute
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume / 100;
+            audioRef.current.muted = isMuted;
+            // console.log(`AudioPlayer: Volume set to: ${volume / 100} isMuted: ${isMuted}`); // Этот лог был в вашем PlaybackControls
+        }
+    }, [volume, isMuted]);
 
-    const handleLoadedMetadata = () => {
-      if (!isNaN(audio.duration) && isFinite(audio.duration)) {
-        usePlayerStore.getState().setDuration(audio.duration);
-        console.log('AudioPlayer: Loaded metadata, duration:', audio.duration);
-      } else {
-        usePlayerStore.getState().setDuration(0);
-        console.log('AudioPlayer: Loaded metadata, duration is NaN or Infinity, setting to 0.');
-      }
-    };
+    // Эффект для управления режимом Повтора (loop)
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.loop = isRepeat;
+        }
+    }, [isRepeat]);
 
-    const handleError = (e: Event) => {
-      console.error('AudioPlayer: Audio error:', e);
-      usePlayerStore.setState({ isPlaying: false, currentSong: null, currentTime: 0, duration: 0 });
-    };
+    // Эффект для установки currentTime в <audio> элементе, если он меняется извне (например, клик по слайдеру)
+    // Этот эффект нужен, если currentTime в сторе может быть изменен не только событием timeupdate самого плеера.
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (audio && Math.abs(audio.currentTime - currentTime) > 0.5) { // Условие для предотвращения цикла обновлений
+            console.log(`AudioPlayer: Seeking audio to ${currentTime}`);
+            audio.currentTime = currentTime;
+        }
+    }, [currentTime]); // Зависит только от currentTime из стора
 
-    audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("error", handleError);
+    // Эффект для подписки на события HTMLAudioElement
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
 
-    return () => {
-      console.log('AudioPlayer: Cleaning up audio event listeners.');
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("error", handleError);
-    };
-  }, []); // Пустой массив зависимостей
+        const handleTimeUpdate = () => {
+            // Обновляем currentTime в сторе только если разница значительна,
+            // чтобы избежать слишком частых обновлений, если currentTime уже обновлялся извне.
+            // Однако, обычно setAudioCurrentTime(audio.currentTime) здесь является основным источником обновления currentTime.
+            if (Math.abs(usePlayerStore.getState().currentTime - audio.currentTime) > 0.1) {
+                 setAudioCurrentTime(audio.currentTime);
+            }
+        };
 
-  // --- EFFECT 3: Синхронизация громкости ---
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.volume = isMuted ? 0 : volume / 100;
-      console.log('AudioPlayer: Volume set to:', audio.volume, 'isMuted:', isMuted);
-    }
-  }, [volume, isMuted]);
+        const handleLoadedMetadata = () => {
+            if (isFinite(audio.duration)) {
+                setDuration(audio.duration);
+                console.log(`AudioPlayer: Loaded metadata, duration: ${audio.duration}`);
+            } else {
+                console.warn(`AudioPlayer: Loaded metadata, but duration is not finite: ${audio.duration}`);
+                // Используем длительность из объекта Song, если она есть и валидна
+                const songDurationFromData = usePlayerStore.getState().currentSong?.duration;
+                if (songDurationFromData && isFinite(songDurationFromData)) {
+                    setDuration(songDurationFromData);
+                     console.log(`AudioPlayer: Using duration from song data: ${songDurationFromData}`);
+                } else {
+                    setDuration(0); // Или другое значение по умолчанию
+                }
+            }
+        };
 
-  // --- EFFECT 4: Синхронизация текущего времени для перемотки (Seek) ---
-  useEffect(() => {
-    const audio = audioRef.current;
-    // Важно: избегать зацикливания. Обновляем audio.currentTime только если
-    // разница между UI временем и реальным временем аудио заметна.
-    // Это предотвращает бесконечные обновления из-за timeupdate события.
-    if (audio && Math.abs(audio.currentTime - currentTime) > 0.5) { // Допуск 0.5 секунды
-        console.log(`AudioPlayer: Seeking to ${currentTime}`);
-        audio.currentTime = currentTime;
-    }
-  }, [currentTime]); // Реагируем на изменение currentTime из стора
+        const handleEnded = () => {
+            console.log("AudioPlayer: Song ended.");
+            // Если не включен режим повтора, переключаем на следующий трек
+            if (!audio.loop) { // audio.loop будет true, если isRepeat true
+                 playNext();
+            }
+            // Если audio.loop = true (isRepeat = true), трек начнется заново автоматически
+        };
 
-  return <audio ref={audioRef} />;
+        const handleCanPlay = () => {
+            console.log("AudioPlayer: Can play through.");
+            // Попытка воспроизведения, если isPlaying=true и трек был на паузе из-за буферизации
+            if (usePlayerStore.getState().isPlaying && audio.paused) {
+                audio.play().catch(error => console.error("Error in canplay auto-play:", error));
+            }
+        };
+
+        const handleError = (e: Event) => {
+            console.error("AudioPlayer: Error encountered with audio element", audio.error, e);
+            // TODO: Возможно, обработка ошибки (например, сообщение пользователю, пропуск трека)
+        };
+
+        const handlePlay = () => {
+            console.log("AudioPlayer: Play event triggered");
+            if (!usePlayerStore.getState().isPlaying) {
+                // Синхронизируем состояние, если воспроизведение началось из-за внешнего события (например, autoplay)
+                // usePlayerStore.getState().togglePlay(); // Это может вызвать цикл, если togglePlay меняет isPlaying
+            }
+        };
+
+        const handlePause = () => {
+            console.log("AudioPlayer: Pause event triggered");
+            if (usePlayerStore.getState().isPlaying && !audio.ended) { // Не меняем isPlaying, если это конец трека (handleEnded сработает)
+                // Синхронизируем состояние, если пауза вызвана извне
+                // usePlayerStore.getState().togglePlay(); // Это может вызвать цикл
+            }
+        };
+
+        audio.addEventListener("timeupdate", handleTimeUpdate);
+        audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+        audio.addEventListener("ended", handleEnded);
+        audio.addEventListener("canplaythrough", handleCanPlay);
+        audio.addEventListener("error", handleError);
+        audio.addEventListener("play", handlePlay);
+        audio.addEventListener("pause", handlePause);
+
+        return () => {
+            console.log("AudioPlayer: Cleaning up audio event listeners.");
+            audio.removeEventListener("timeupdate", handleTimeUpdate);
+            audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+            audio.removeEventListener("ended", handleEnded);
+            audio.removeEventListener("canplaythrough", handleCanPlay);
+            audio.removeEventListener("error", handleError);
+            audio.removeEventListener("play", handlePlay);
+            audio.removeEventListener("pause", handlePause);
+        };
+        // Зависимости этого useEffect должны включать функции, которые он вызывает из стора,
+        // чтобы реагировать на их изменение, если они не стабильны.
+        // Однако, setAudioCurrentTime, setDuration, playNext обычно стабильны из Zustand.
+        // currentSong здесь нужен, чтобы перенавесить слушатели, если сам audio объект пересоздается
+        // (хотя в данном коде audioRef.current должен быть стабильным).
+        // Основная цель - навесить слушатели один раз.
+    }, [setAudioCurrentTime, setDuration, playNext]); // Достаточно этих зависимостей для установки слушателей
+
+    return <audio ref={audioRef} className="hidden" preload="metadata" />;
 };
 
-export default AudioPlayer; 
+export default AudioPlayer;

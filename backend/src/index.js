@@ -7,7 +7,7 @@ import cors from "cors";
 import fs from "fs";
 import { createServer } from "http";
 import cron from "node-cron";
-import spotifyRoutes from './routes/spotify.route.js';
+
 import { initializeSocket } from "./lib/socket.js";
 
 import { connectDB } from "./lib/db.js";
@@ -77,6 +77,7 @@ if (process.env.NODE_ENV === "production") {
 	});
 }
 
+
 // error handler
 app.use((err, req, res, next) => {
 	res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
@@ -92,4 +93,3 @@ httpServer.listen(PORT, () => {
 // });
 
 
-app.use('/api/spotify', spotifyRoutes);
